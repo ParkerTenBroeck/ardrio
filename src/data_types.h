@@ -147,13 +147,7 @@ union Buttons{
     uint32_t button31: 1;
   };
 
-  bool get(size_t button){
-    if (button >= 32){
-      return false;
-    }else{
-      return ((*(uint32_t*)this) >> button) & 1;
-    }
-  }
+  bool get(size_t button);
 };
 
 struct ControllerMetadata{

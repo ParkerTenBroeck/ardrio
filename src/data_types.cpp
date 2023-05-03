@@ -21,6 +21,16 @@ size_t DSToRobotUDP::tags_len(){
 
 //-------------------------------------------------------
 
+bool Buttons::get(size_t button){
+  if (button >= 32){
+    return false;
+  }else{
+    return ((*(uint32_t*)this) >> button) & 1;
+  }
+}
+
+//-------------------------------------------------------
+
 float RobotVoltage::toFloat(){
   return (float)this->itg + ((float) this->dec) / 256.0;
 }
