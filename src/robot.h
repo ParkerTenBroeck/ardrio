@@ -1,47 +1,49 @@
 #pragma once
 
-#include "esp32-hal.h"
 #include "data_types.h"
 #include "driverstation.h"
+#include "esp32-hal.h"
 
-enum class RunMode{
+enum class RunMode {
   Blocking,
   NewTask,
   NewTaskEndCurrent,
 };
 
-class RobotBase{
-public:
+class RobotBase {
+ public:
   virtual void start_competition();
   virtual void end_competition();
 };
 
-class TimedRobot: public RobotBase{
-  private:
+class TimedRobot : public RobotBase {
+ private:
   ControlCode current_mode;
   bool first = true;
-public:
+
+ public:
   uint32_t delta_time_ms = 20;
 
   void start_competition() override;
   void end_competition() override;
 
-  virtual void disabled_init(){}
-  virtual void teleop_init(){}
-  virtual void test_init(){}
-  virtual void auton_init(){}
+  virtual void disabled_init() {}
+  virtual void teleop_init() {}
+  virtual void test_init() {}
+  virtual void auton_init() {}
 
-  virtual void robot_periodic(){}
-  virtual void disabled_periodic(){}
-  virtual void teleop_periodic(){}
-  virtual void test_periodic(){}
-  virtual void auton_periodic(){}
+  virtual void robot_periodic() {}
+  virtual void disabled_periodic() {}
+  virtual void teleop_periodic() {}
+  virtual void test_periodic() {}
+  virtual void auton_periodic() {}
 
-  virtual void disabled_exit(){}
-  virtual void teleop_exit(){}
-  virtual void test_exit(){}
-  virtual void auton_exit(){}
-private:
+  virtual void disabled_exit() {}
+  virtual void teleop_exit() {}
+  virtual void test_exit() {}
+  virtual void auton_exit() {}
+
+ private:
   void run_tick();
 };
 
@@ -56,16 +58,17 @@ void run_robot_inner(void* param) {
 }
 
 template <typename T>
-void run_robot(RunMode mode = RunMode::Blocking){
-  if (mode == RunMode::Blocking){
+void run_robot(RunMode mode = RunMode::Blocking) {
+  if (mode == RunMode::Blocking) {
     run_robot_inner<T>(NULL);
-  }else if (mode == RunMode::NewTask || mode == RunMode::NewTaskEndCurrent){
-      xTaskCreateUniversal(run_robot_inner<T>,"Robot Code", uxTaskGetStackHighWaterMark(NULL) , NULL, 1, NULL, ARDUINO_RUNNING_CORE);
-      if (mode == RunMode::NewTaskEndCurrent){
-        vTaskDelete(NULL);
-      }
-  }else{
-    //idk how to panic in c++
+  } else if (mode == RunMode::NewTask || mode == RunMode::NewTaskEndCurrent) {
+    xTaskCreateUniversal(run_robot_inner<T>, "Robot Code",
+                         uxTaskGetStackHighWaterMark(NULL), NULL, 1, NULL,
+                         ARDUINO_RUNNING_CORE);
+    if (mode == RunMode::NewTaskEndCurrent) {
+      vTaskDelete(NULL);
+    }
+  } else {
+    // idk how to panic in c++
   }
 }
-

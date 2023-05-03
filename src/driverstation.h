@@ -1,15 +1,16 @@
 #pragma once
 #include <Arduino.h>
-#include "freertos/FreeRTOS.h"
-#include "data_types.h"
 #include <WiFi.h>
+
 #include <atomic>
+
+#include "data_types.h"
+#include "freertos/FreeRTOS.h"
 
 #define BUF_CAPACITY 256 * 8
 
-struct Driverstation
-{
-private:
+struct Driverstation {
+ private:
   std::atomic<AllianceStation> alliance_station;
   std::atomic<ControlCode> control;
   std::atomic<RobotRequestCode> r_request;
@@ -60,13 +61,14 @@ private:
 
   static void driverstation_update_loop(Driverstation *instance);
 
-public:
-  void begin(uint16_t udp_port = 1110, uint16_t udp_fms_port = 1115, uint16_t udp_send_port = 1150, uint16_t tcp_port = 1740);
+ public:
+  void begin(uint16_t udp_port = 1110, uint16_t udp_fms_port = 1115,
+             uint16_t udp_send_port = 1150, uint16_t tcp_port = 1740);
   void stop();
-  
+
   ~Driverstation();
 
-public:
+ public:
   void observe_disabled();
   void observe_teleop();
   void observe_test();
@@ -89,13 +91,12 @@ public:
   float get_countdown();
   Controller get_controller(uint8_t controller);
 
-
   void print(const char *msg, size_t str_size);
   void print(std::string msg);
   void print(const char *msg);
   void printf(const char *format, ...);
 
-private:
+ private:
   // this is for the observe_[mode] functions.
   // 255 dissable
   // 0 teleop
