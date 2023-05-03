@@ -1,4 +1,5 @@
 #include "ardrio.h"
+#include "wifi_setup.h"
 
 class MyRobot : public TimedRobot {
  public:
