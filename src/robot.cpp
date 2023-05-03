@@ -1,13 +1,16 @@
 #include "robot.h"
-
 #include "esp_task.h"
+#include "esp_task_wdt.h"
 
 void test() {}
 
 void TimedRobot::start_competition() {
+  esp_task_wdt_init(1, true);
+  esp_task_wdt_add(NULL);
   TickType_t last_wake = xTaskGetTickCount();
   BaseType_t was_delayed;
   while (1) {
+    esp_task_wdt_reset();
     was_delayed =
         xTaskDelayUntil(&last_wake, pdMS_TO_TICKS(this->delta_time_ms));
     this->run_tick();
