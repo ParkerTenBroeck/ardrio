@@ -1,15 +1,14 @@
 #pragma once
+#include <Arduino.h>
 
-#include<Arduino.h>
-
-typedef enum class AllianceStation: uint8_t{
+enum class AllianceStation: uint8_t{
   Red1 = 0,
   Red2 = 1,
   Red3 = 2,
   Blue1 = 3,
   Blue2 = 4,
   Blue3 = 5,
-} AllianceStation;
+};
 
 struct ControlCode{
   uint8_t mode: 2;
@@ -40,29 +39,12 @@ struct DSToRobotUDPInner{
 };
 
 struct DSToRobotUDP{
-
-public:
-
-  uint size;
-  uint capacity;
+  size_t size;
+  size_t capacity;
   DSToRobotUDPInner* data;
 
-  static DSToRobotUDP from_big_endian_buffer(uint8_t* buf, uint len, uint capacity){
-    if (capacity < 6){
-      return {};
-    }
-    DSToRobotUDP self = {len, capacity, (DSToRobotUDPInner*)buf};
-
-    // swap the bytes 
-    self.data->sequence = self.data->sequence >> 8 | self.data->sequence << 8;
-
-    //TODO converte the tags
-    return self;
-  }
-
-  uint tags_len(){
-    return this->size - 6;
-  }
+  static DSToRobotUDP from_big_endian_buffer(uint8_t* buf, size_t len, size_t capacity);
+  size_t tags_len();
 };
 
 
@@ -70,13 +52,11 @@ struct RobotVoltage{
   uint8_t itg;
   uint8_t dec;
 
-  float toFloat(){
-    return (float)this->itg + ((float) this->dec) / 256.0;
-  }
+  RobotVoltage() noexcept = default;
+  RobotVoltage(uint8_t itg, uint8_t dec);
+  RobotVoltage(float voltage);
 
-  static RobotVoltage fromFloat(float voltage){
-    return {(uint8_t)voltage, (uint8_t)((voltage-(uint8_t)voltage)*256.0)};
-  }
+  float toFloat();
 };
 
 struct RobotStatusCode{
@@ -107,64 +87,21 @@ struct RobotToDSUDPInner{
 };
 
 struct RobotToDSUDP{
-  uint size;
-  uint capacity;
+  size_t size;
+  size_t capacity;
   RobotToDSUDPInner* data;
 
-  static RobotToDSUDP from_big_endian_buffer(uint8_t* buf, uint len, uint capacity){
-    if (capacity < 8){
-      return {};
-    }
-    RobotToDSUDP self = {len, capacity, (RobotToDSUDPInner*)buf};
+  static RobotToDSUDP from_big_endian_buffer(uint8_t* buf, size_t len, size_t capacity);
 
-    // big endian to little endian
-    self.data->sequence = self.data->sequence >> 8 | self.data->sequence << 8;
+  static RobotToDSUDP from_little_endian_buffer(uint8_t* buf, size_t capacity);
 
-    //TODO converte the tags
-    return self;
-  }
-
-  static RobotToDSUDP from_little_endian_buffer(uint8_t* buf, uint capacity){
-    if (capacity < 8){
-      return {};
-    }
-    RobotToDSUDP self = {8, capacity, (RobotToDSUDPInner*)buf};
-        //TODO make sure the tags idk like exist
-    return self;
-  }
-
-  uint tags_len(){
-    return this->size - 8;
-  }
+  size_t tags_len();
 
   // the size of the returned buffer is the same as this.size
-  uint8_t* to_big_endian_buffer(){
-      this->data->sequence = this->data->sequence >> 8 | this->data->sequence << 8;
-
-      //TODO converte the tags 
-
-      return (uint8_t*)this->data;
-  }
+  uint8_t* to_big_endian_buffer();
 };
 
-const char* stationAsString(AllianceStation station){
-  switch ((AllianceStation)station){
-    case AllianceStation::Red1:
-      return "Red1";
-    case AllianceStation::Red2:
-      return "Red2";  
-    case AllianceStation::Red3:
-      return "Red3";
-    case AllianceStation::Blue1: 
-      return "Blue1";
-    case AllianceStation::Blue2:
-      return "Blue2";
-    case AllianceStation::Blue3:
-      return "Blue3";
-    default:
-      return "Bruh?";
-  }
-}
+const char* stationAsString(AllianceStation station);
 
 
 
@@ -210,7 +147,7 @@ union Buttons{
     uint32_t button31: 1;
   };
 
-  bool get(uint button){
+  bool get(size_t button){
     if (button >= 32){
       return false;
     }else{

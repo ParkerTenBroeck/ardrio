@@ -1,7 +1,5 @@
 #pragma once
 
-#include <stdint.h>
-#include <cstddef>
 #include "esp32-hal.h"
 
 enum class RunMode{
