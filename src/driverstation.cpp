@@ -15,8 +15,11 @@
 #include <WiFiServer.h>
 #include <atomic>
 
+
 #define EXPOSE_DRIVERSTATION_BUF_CAPACITY
 #include "driverstation.h"
+
+Driverstation DRIVERSTATION;
 
 void Driverstation::driverstation_update_loop(Driverstation *instance)
 {
@@ -25,7 +28,6 @@ void Driverstation::driverstation_update_loop(Driverstation *instance)
         instance->update();
         delay(1);
     }
-    xSemaphoreGive(instance->network_task_running);
 }
 
 void Driverstation::observe_voltage(RobotVoltage voltage)
@@ -163,6 +165,11 @@ Controller Driverstation::get_controller(uint8_t controller)
 
 void Driverstation::begin(uint16_t udp_port, uint16_t udp_fms_port, uint16_t udp_send_port, uint16_t tcp_port)
 {
+    if (this->running.exchange(true, std::memory_order_relaxed))
+    {
+        // already running
+        return;
+    }
     this->udp.begin(udp_port);
     this->udp_fms.begin(udp_fms_port);
     this->udp_send_port = udp_send_port;
@@ -170,19 +177,24 @@ void Driverstation::begin(uint16_t udp_port, uint16_t udp_fms_port, uint16_t udp
     this->tcp = WiFiServer(tcp_port);
     this->tcp.begin();
 
-    this->tcp_client_mutex = xSemaphoreCreateMutex();
-    assert(this->tcp_client_mutex);
+    if (!this->tcp_client_mutex)
+    {
+        this->tcp_client_mutex = xSemaphoreCreateMutex();
+        assert(this->tcp_client_mutex);
+    }
 
-    this->network_task_running = xSemaphoreCreateMutex();
-    assert(this->network_task_running);
+    if (!this->udp_estop_brownout_mutex)
+    {
+        this->udp_estop_brownout_mutex = xSemaphoreCreateMutex();
+        assert(this->udp_estop_brownout_mutex);
+    }
 
-    this->udp_estop_brownout_mutex = xSemaphoreCreateMutex();
-    assert(this->udp_estop_brownout_mutex);
+    if (!this->udp_controller_mutex)
+    {
+        this->udp_controller_mutex = xSemaphoreCreateMutex();
+        assert(this->udp_controller_mutex);
+    }
 
-    this->udp_controller_mutex = xSemaphoreCreateMutex();
-    assert(this->udp_controller_mutex);
-
-    xSemaphoreTake(this->network_task_running, portMAX_DELAY);
     xTaskCreatePinnedToCore(
         (void (*)(void *))Driverstation::driverstation_update_loop,
         "Driverstatoin Network Communication",
@@ -195,13 +207,13 @@ void Driverstation::begin(uint16_t udp_port, uint16_t udp_fms_port, uint16_t udp
     esp_task_wdt_add(network_task_handle);
 }
 
-Driverstation::~Driverstation()
+void Driverstation::stop()
 {
     xSemaphoreTake(this->tcp_client_mutex, portMAX_DELAY);
-    xSemaphoreTake(this->network_task_running, portMAX_DELAY);
+
     xSemaphoreTake(this->udp_estop_brownout_mutex, portMAX_DELAY);
     xSemaphoreTake(this->udp_controller_mutex, portMAX_DELAY);
-    // vTaskDelete
+    vTaskDelete(this->network_task_handle);
     if (this->tcp_client && this->tcp_client.connected())
     {
         this->tcp_client.stop();
@@ -209,6 +221,18 @@ Driverstation::~Driverstation()
     this->udp.stop();
     this->udp_fms.stop();
     this->tcp.stop();
+    this->running.store(false, std::memory_order_relaxed);
+    xSemaphoreGive(this->tcp_client_mutex);
+    xSemaphoreGive(this->udp_estop_brownout_mutex);
+    xSemaphoreGive(this->udp_controller_mutex);
+}
+
+Driverstation::~Driverstation()
+{
+    this->stop();
+    xSemaphoreTake(this->tcp_client_mutex, portMAX_DELAY);
+    xSemaphoreTake(this->udp_estop_brownout_mutex, portMAX_DELAY);
+    xSemaphoreTake(this->udp_controller_mutex, portMAX_DELAY);
     vSemaphoreDelete(this->tcp_client_mutex);
     vSemaphoreDelete(this->udp_controller_mutex);
     vSemaphoreDelete(this->network_task_handle);
@@ -553,6 +577,7 @@ bool Driverstation::handle_incomming_udp(uint8_t buf[], uint len)
         packet.data->control_code = this->control.load(std::memory_order_relaxed);
         packet.data->sequence = received_sequence;
         packet.data->status = this->status.load(std::memory_order_relaxed);
+        packet.data->status.has_robot_code = true;
         packet.data->request = this->ds_request.load(std::memory_order_relaxed);
 
         this->udp.beginPacket(this->udp.remoteIP(), this->udp_send_port);

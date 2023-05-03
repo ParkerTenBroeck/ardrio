@@ -1,6 +1,8 @@
 #pragma once
 
 #include "esp32-hal.h"
+#include "data_types.h"
+#include "driverstation.h"
 
 enum class RunMode{
   Blocking,
@@ -15,8 +17,11 @@ public:
 };
 
 class TimedRobot: public RobotBase{
+  private:
+  ControlCode current_mode;
+  bool first = true;
 public:
-  uint32_t delta_time_us = 20000;
+  uint32_t delta_time_ms = 20;
 
   void start_competition() override;
   void end_competition() override;
@@ -26,6 +31,7 @@ public:
   virtual void test_init(){}
   virtual void auton_init(){}
 
+  virtual void robot_periodic(){}
   virtual void disabled_periodic(){}
   virtual void teleop_periodic(){}
   virtual void test_periodic(){}
@@ -35,10 +41,13 @@ public:
   virtual void teleop_exit(){}
   virtual void test_exit(){}
   virtual void auton_exit(){}
+private:
+  void run_tick();
 };
 
 template <typename T>
 void run_robot_inner(void* param) {
+  DRIVERSTATION.begin();
   T robot = T();
   robot.start_competition();
   robot.end_competition();

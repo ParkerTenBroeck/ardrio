@@ -54,6 +54,7 @@ private:
   std::atomic<bool> exit_all_tasks;
 
   std::atomic<bool> connected;
+  std::atomic<bool> running;
 
   uint8_t buf[BUF_CAPACITY];
 
@@ -61,7 +62,8 @@ private:
 
 public:
   void begin(uint16_t udp_port = 1110, uint16_t udp_fms_port = 1115, uint16_t udp_send_port = 1150, uint16_t tcp_port = 1740);
-
+  void stop();
+  
   ~Driverstation();
 
 public:
@@ -112,7 +114,7 @@ private:
   bool read_controller_tag(uint8_t data[], uint len, int controller);
 };
 
-static Driverstation DRIVERSTATION;
+extern Driverstation DRIVERSTATION;
 
 #ifndef EXPOSE_DRIVERSTATION_BUF_CAPACITY
 #undef BUF_CAPACITY
