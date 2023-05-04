@@ -238,6 +238,21 @@ void Driverstation::printf(const char *format, ...) {
   }
 }
 
+bool Driverstation::connected_udp(){
+    return this->udp_connected_flag.load(std::memory_order_relaxed);
+}
+
+bool Driverstation::connected_tcp(){
+    if(this->tcp_client){
+        return this->tcp_client.connected();
+    }
+    return false;
+}
+
+bool Driverstation::connected(){
+    return this->connected_udp() && this->connected_tcp();
+}
+
 void Driverstation::update_control_mode(bool enabled, uint8_t mode,
                                         ControlCode initial) {
   auto updated = initial;
@@ -253,7 +268,8 @@ void Driverstation::teleop() {
   auto control = this->control.load(std::memory_order_relaxed);
   if (!(control.enabled && control.mode == 0)) {
     this->update_control_mode(true, 0, control);
-    Serial.println("Teleop");
+    auto hook = this->teleop_hook.load(std::memory_order_relaxed);
+    if (hook) hook(this);
   }
 }
 
@@ -261,7 +277,8 @@ void Driverstation::auton() {
   auto control = this->control.load(std::memory_order_relaxed);
   if (!(control.enabled && control.mode == 2)) {
     this->update_control_mode(true, 2, control);
-    Serial.println("Auton");
+    auto hook = this->auton_hook.load(std::memory_order_relaxed);
+    if (hook) hook(this);
   }
 }
 
@@ -269,7 +286,8 @@ void Driverstation::test() {
   auto control = this->control.load(std::memory_order_relaxed);
   if (!(control.enabled && control.mode == 1)) {
     this->update_control_mode(true, 1, control);
-    Serial.println("Test");
+    auto hook = this->test_hook.load(std::memory_order_relaxed);
+    if (hook) hook(this);
   }
 }
 
@@ -291,6 +309,7 @@ void Driverstation::update() {
   if (len > 0) {
     if (this->handle_incomming_udp(this->buf, len)) {
       last_received_udp = micros();
+      this->udp_connected_flag.store(true, std::memory_order_relaxed);
     }
 
     if (this->tcp_client && this->tcp_client.connected()) {
@@ -298,9 +317,13 @@ void Driverstation::update() {
     }
   }
 
-  if (micros() - last_received_udp > 300 * 1000) {
+  if (micros() - this->last_received_udp > 300 * 1000) {
     disable();
   }
+  if (micros() - this->last_received_udp > 1000 * 1000){
+      this->udp_connected_flag.store(false, std::memory_order_relaxed);
+  }
+
   if (micros() - this->robot_status_watchdog > 150 * 1000) {
     this->status.store({}, std::memory_order_relaxed);
   }
@@ -334,10 +357,12 @@ bool Driverstation::handle_incomming_udp(uint8_t buf[], uint len) {
       return false;
     }
     if (packet.data->request_code.restart_roborio_code) {
-      ESP.restart();
+      auto hook = this->restart_code_hook.load(std::memory_order_relaxed);
+      if (hook) hook(this);
     }
     if (packet.data->request_code.restart_roborio) {
-      ESP.restart();
+      auto hook = this->restart_hook.load(std::memory_order_relaxed);
+      if (hook) hook(this);
     }
 
     xSemaphoreTake(this->udp_estop_brownout_mutex, portMAX_DELAY);
@@ -345,8 +370,8 @@ bool Driverstation::handle_incomming_udp(uint8_t buf[], uint len) {
       auto current_control = this->control.load(std::memory_order_relaxed);
       if (packet.data->control_code.enabled != current_control.enabled) {
         auto mode = packet.data->control_code.mode;
-        if (packet.data->control_code.estop | current_control.estop) {
-          this->estop();
+        if (packet.data->control_code.estop || current_control.estop) {
+          this->estop_pre_locked();
         } else if (current_control.brownout_protection) {
           // do nothing
         } else if (!packet.data->control_code.enabled) {
@@ -358,7 +383,7 @@ bool Driverstation::handle_incomming_udp(uint8_t buf[], uint len) {
         } else if (mode == 1) {
           this->test();
         } else {
-          this->estop();
+          this->estop_pre_locked();
         }
       }
     }
@@ -532,14 +557,14 @@ void IRAM_ATTR Driverstation::disable() {
   auto control = this->control.load(std::memory_order_relaxed);
   if (control.enabled && !control.estop) {
     this->update_control_mode(false, 0, control);
-    Serial.println("Disabled");
+    auto hook = this->disable_hook.load(std::memory_order_relaxed);
+    if (hook) hook(this);
   }
 }
 
-void IRAM_ATTR Driverstation::estop() {
-  xSemaphoreTake(this->udp_estop_brownout_mutex, portMAX_DELAY);
+void IRAM_ATTR Driverstation::estop_pre_locked() {
   auto initial = this->control.load(std::memory_order_relaxed);
-  if (initial.estop) {
+  if (!initial.estop) {
     auto updated = initial;
     do {
       updated = initial;
@@ -548,8 +573,15 @@ void IRAM_ATTR Driverstation::estop() {
     } while (!this->control.compare_exchange_weak(initial, updated,
                                                   std::memory_order_relaxed,
                                                   std::memory_order_relaxed));
-    Serial.println("ESTOP");
+
+    auto hook = this->estop_hook.load(std::memory_order_relaxed);
+    if (hook) hook(this);
   }
+}
+
+void IRAM_ATTR Driverstation::estop() {
+  xSemaphoreTake(this->udp_estop_brownout_mutex, portMAX_DELAY);
+  this->estop_pre_locked();
   xSemaphoreGive(this->udp_estop_brownout_mutex);
 }
 
@@ -558,7 +590,6 @@ void IRAM_ATTR Driverstation::start_brownout() {
   auto initial = this->control.load(std::memory_order_relaxed);
   auto updated = initial;
   if (initial.brownout_protection) {
-    this->disable();
     xSemaphoreGive(this->udp_estop_brownout_mutex);
     return;
   }
@@ -567,18 +598,24 @@ void IRAM_ATTR Driverstation::start_brownout() {
     updated.brownout_protection = true;
   } while (!this->control.compare_exchange_weak(
       initial, updated, std::memory_order_relaxed, std::memory_order_relaxed));
-  this->disable();
+  auto hook = this->brownout_start_hook.load(std::memory_order_relaxed);
+  if (hook) hook(this);
   xSemaphoreGive(this->udp_estop_brownout_mutex);
 }
 
 void IRAM_ATTR Driverstation::end_brownout() {
   xSemaphoreTake(this->udp_estop_brownout_mutex, portMAX_DELAY);
   auto initial = this->control.load(std::memory_order_relaxed);
+  const bool changed = initial.brownout_protection;
   auto updated = initial;
   do {
     updated = initial;
     updated.brownout_protection = false;
   } while (!this->control.compare_exchange_weak(
       initial, updated, std::memory_order_relaxed, std::memory_order_relaxed));
+  if (changed) {
+    auto hook = this->brownout_end_hook.load(std::memory_order_relaxed);
+    if (hook) hook(this);
+  }
   xSemaphoreGive(this->udp_estop_brownout_mutex);
 }

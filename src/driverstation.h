@@ -7,7 +7,7 @@
 #include "data_types.h"
 #include "freertos/FreeRTOS.h"
 
-#define BUF_CAPACITY 256 * 8
+#define BUF_CAPACITY 256
 
 struct Driverstation {
  private:
@@ -54,12 +54,29 @@ struct Driverstation {
   SemaphoreHandle_t network_task_running;
   std::atomic<bool> exit_all_tasks;
 
-  std::atomic<bool> connected;
+  std::atomic<bool> udp_connected_flag;
   std::atomic<bool> running;
 
   uint8_t buf[BUF_CAPACITY];
 
-  static void driverstation_update_loop(Driverstation *instance);
+ public: 
+  
+  typedef void(*Hook)(Driverstation*);
+  std::atomic<Hook> disable_hook;
+  std::atomic<Hook> teleop_hook;
+  std::atomic<Hook> test_hook;
+  std::atomic<Hook> auton_hook;
+
+  // This should be able to be used in an ISR
+  std::atomic<Hook> estop_hook;
+  // This should be able to be used in an ISR
+  std::atomic<Hook> brownout_start_hook;
+  // This should be able to be used in an ISR
+  std::atomic<Hook> brownout_end_hook;
+  // This should be able to be used in an ISR
+  std::atomic<Hook> restart_code_hook;
+  // This should be able to be used in an ISR
+  std::atomic<Hook> restart_hook;
 
  public:
   void begin(uint16_t udp_port = 1110, uint16_t udp_fms_port = 1115,
@@ -68,7 +85,6 @@ struct Driverstation {
 
   ~Driverstation();
 
- public:
   void observe_disabled();
   void observe_teleop();
   void observe_test();
@@ -80,7 +96,6 @@ struct Driverstation {
 
   void start_brownout();
   void end_brownout();
-
   void estop();
 
   void request_disable();
@@ -96,7 +111,15 @@ struct Driverstation {
   void print(const char *msg);
   void printf(const char *format, ...);
 
+  bool connected_udp();
+  bool connected_tcp();
+  bool connected();
+
  private:
+  static void driverstation_update_loop(Driverstation *instance);
+  void update();
+
+  void estop_pre_locked();
   // this is for the observe_[mode] functions.
   // 255 dissable
   // 0 teleop
@@ -110,7 +133,6 @@ struct Driverstation {
   void auton();
   void test();
 
-  void update();
   bool handle_incomming_udp(uint8_t buf[], uint len);
   bool read_controller_tag(uint8_t data[], uint len, int controller);
 };

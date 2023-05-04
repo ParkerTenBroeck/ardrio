@@ -2,6 +2,7 @@
 
 #include "data_types.h"
 #include "driverstation.h"
+#include "hal.h"
 #include "esp32-hal.h"
 
 enum class RunMode {
@@ -48,21 +49,58 @@ class TimedRobot : public RobotBase {
 };
 
 template <typename T>
-void run_robot_inner(void* param) {
-  DRIVERSTATION.begin();
-  T robot = T();
-  robot.start_competition();
-  robot.end_competition();
-  vTaskDelete(NULL);
-  delay(2147483647);
-}
+void start_robot(RunMode mode = RunMode::Blocking) {
 
-template <typename T>
-void run_robot(RunMode mode = RunMode::Blocking) {
+  run_hal_initialization();
+
+  DRIVERSTATION.disable_hook = [](Driverstation* ds){
+    ds->print("Disabled");
+  };
+  DRIVERSTATION.teleop_hook = [](Driverstation* ds){
+    ds->print("Teleop");
+  };
+  DRIVERSTATION.test_hook = [](Driverstation* ds){
+    ds->print("Test");
+  };
+  DRIVERSTATION.auton_hook = [](Driverstation* ds){
+    ds->print("Auton");
+  };
+  DRIVERSTATION.brownout_start_hook = [](Driverstation* ds){
+    ds->print("Brownout Start");
+  };
+  DRIVERSTATION.brownout_end_hook = [](Driverstation* ds){
+    ds->print("Brownout End");
+  };
+  DRIVERSTATION.estop_hook = [](Driverstation* ds){
+    ds->print("Estop");
+  };
+  DRIVERSTATION.restart_code_hook = [](Driverstation* ds){
+    ds->print("Restart Code");
+    delay(100);
+    ESP.restart();
+  };
+  DRIVERSTATION.restart_hook = [](Driverstation* ds){
+    ds->print("Restart");
+    delay(100);
+    ESP.restart();
+  };
+
+  DRIVERSTATION.begin();
+  while(!DRIVERSTATION.connected())
+    delay(1);
+
+
+  auto run_robot = [] (void* param) {
+    T robot = T();
+    robot.start_competition();
+    robot.end_competition();
+    vTaskDelete(NULL);
+    delay(2147483647);
+  };
   if (mode == RunMode::Blocking) {
-    run_robot_inner<T>(NULL);
+    run_robot(NULL);
   } else if (mode == RunMode::NewTask || mode == RunMode::NewTaskEndCurrent) {
-    xTaskCreateUniversal(run_robot_inner<T>, "Robot Code",
+    xTaskCreateUniversal(run_robot, "Robot Code",
                          uxTaskGetStackHighWaterMark(NULL), NULL, 1, NULL,
                          ARDUINO_RUNNING_CORE);
     if (mode == RunMode::NewTaskEndCurrent) {

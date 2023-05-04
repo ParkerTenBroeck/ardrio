@@ -37,7 +37,7 @@ void setup() {
     begin_ap(1114, "ESP32");
   }
 
-  run_robot<MyRobot>();
+  start_robot<MyRobot>();
 }
 
 void loop() { /*doesn't run*/ }

@@ -2,7 +2,6 @@
 #include "esp_task.h"
 #include "esp_task_wdt.h"
 
-void test() {}
 
 void TimedRobot::start_competition() {
   esp_task_wdt_init(1, true);
