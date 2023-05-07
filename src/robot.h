@@ -55,6 +55,7 @@ void start_robot(bool wait_for_ds = true, RunMode mode = RunMode::Blocking,
 
   driverstation->disable_hook = [](Driverstation* ds) {
     ds->print("Disabled");
+
   };
   driverstation->teleop_hook = [](Driverstation* ds) { ds->print("Teleop"); };
   driverstation->test_hook = [](Driverstation* ds) { ds->print("Test"); };
@@ -102,7 +103,7 @@ void start_robot(bool wait_for_ds = true, RunMode mode = RunMode::Blocking,
     };
   }
   if (mode == RunMode::Blocking) {
-    run_robot(NULL);
+    run_robot((void*)driverstation);
   } else if (mode == RunMode::NewTask || mode == RunMode::NewTaskEndCurrent) {
     xTaskCreateUniversal(run_robot, "Robot Code",
                          uxTaskGetStackHighWaterMark(NULL),
