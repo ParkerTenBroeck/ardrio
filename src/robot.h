@@ -2,8 +2,8 @@
 
 #include "data_types.h"
 #include "driverstation.h"
-#include "hal.h"
 #include "esp32-hal.h"
+#include "hal.h"
 
 enum class RunMode {
   Blocking,
@@ -49,59 +49,64 @@ class TimedRobot : public RobotBase {
 };
 
 template <typename T>
-void start_robot(bool wait_for_ds = true, RunMode mode = RunMode::Blocking) {
-
+void start_robot(bool wait_for_ds = true, RunMode mode = RunMode::Blocking,
+                 Driverstation* driverstation = &DRIVERSTATION) {
   run_hal_initialization();
 
-  DRIVERSTATION.disable_hook = [](Driverstation* ds){
+  driverstation->disable_hook = [](Driverstation* ds) {
     ds->print("Disabled");
   };
-  DRIVERSTATION.teleop_hook = [](Driverstation* ds){
-    ds->print("Teleop");
-  };
-  DRIVERSTATION.test_hook = [](Driverstation* ds){
-    ds->print("Test");
-  };
-  DRIVERSTATION.auton_hook = [](Driverstation* ds){
-    ds->print("Auton");
-  };
-  DRIVERSTATION.brownout_start_hook = [](Driverstation* ds){
+  driverstation->teleop_hook = [](Driverstation* ds) { ds->print("Teleop"); };
+  driverstation->test_hook = [](Driverstation* ds) { ds->print("Test"); };
+  driverstation->auton_hook = [](Driverstation* ds) { ds->print("Auton"); };
+  driverstation->brownout_start_hook = [](Driverstation* ds) {
     ds->print("Brownout Start");
   };
-  DRIVERSTATION.brownout_end_hook = [](Driverstation* ds){
+  driverstation->brownout_end_hook = [](Driverstation* ds) {
     ds->print("Brownout End");
   };
-  DRIVERSTATION.estop_hook = [](Driverstation* ds){
-    ds->print("Estop");
-  };
-  DRIVERSTATION.restart_code_hook = [](Driverstation* ds){
+  driverstation->estop_hook = [](Driverstation* ds) { ds->print("Estop"); };
+  driverstation->restart_code_hook = [](Driverstation* ds) {
     ds->print("Restart Code");
     delay(100);
     ESP.restart();
   };
-  DRIVERSTATION.restart_hook = [](Driverstation* ds){
+  driverstation->restart_hook = [](Driverstation* ds) {
     ds->print("Restart");
     delay(100);
     ESP.restart();
   };
 
+  void (*run_robot)(void*);
 
-  auto run_robot = [] (void* param) {
-    DRIVERSTATION.begin();
-    while(!DRIVERSTATION.connected() && wait_for_ds)
-      delay(1);
-    T robot = T();
-    robot.start_competition();
-    robot.end_competition();
-    vTaskDelete(NULL);
-    delay(2147483647);
-  };
+  if (wait_for_ds) {
+    run_robot = [](void* ds_v) {
+      auto ds = (Driverstation*)ds_v;
+      ds->begin();
+      while (!ds->connected()) delay(1);
+      T robot = T();
+      robot.start_competition();
+      robot.end_competition();
+      vTaskDelete(NULL);
+      delay(2147483647);
+    };
+  } else {
+    run_robot = [](void* ds_v) {
+      auto ds = (Driverstation*)ds_v;
+      ds->begin();
+      T robot = T();
+      robot.start_competition();
+      robot.end_competition();
+      vTaskDelete(NULL);
+      delay(2147483647);
+    };
+  }
   if (mode == RunMode::Blocking) {
     run_robot(NULL);
   } else if (mode == RunMode::NewTask || mode == RunMode::NewTaskEndCurrent) {
     xTaskCreateUniversal(run_robot, "Robot Code",
-                         uxTaskGetStackHighWaterMark(NULL), NULL, 1, NULL,
-                         ARDUINO_RUNNING_CORE);
+                         uxTaskGetStackHighWaterMark(NULL),
+                         (void*)driverstation, 1, NULL, ARDUINO_RUNNING_CORE);
     if (mode == RunMode::NewTaskEndCurrent) {
       vTaskDelete(NULL);
     }
