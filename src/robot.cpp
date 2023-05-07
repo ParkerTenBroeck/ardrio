@@ -14,7 +14,7 @@ void TimedRobot::start_competition() {
         xTaskDelayUntil(&last_wake, pdMS_TO_TICKS(this->delta_time_ms));
     this->run_tick();
     if (!was_delayed) {
-      // print warning for watch dog overrun
+      // print warning for task taking too long
     }
   }
 }
@@ -52,8 +52,7 @@ void TimedRobot::run_tick() {
   }
   this->current_mode = mode;
 
-  // DRIVERSTATION.observe_robot_code();
-  // DRIVERSTATION.observe_roborio();
+  DRIVERSTATION.observe_robot_code();
   this->robot_periodic();
   if (!mode.enabled) {
     DRIVERSTATION.observe_disabled();

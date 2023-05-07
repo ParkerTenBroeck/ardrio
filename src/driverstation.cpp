@@ -479,7 +479,6 @@ bool Driverstation::handle_incomming_udp(uint8_t buf[], uint len) {
     packet.data->control_code = this->control.load(std::memory_order_relaxed);
     packet.data->sequence = received_sequence;
     packet.data->status = this->status.load(std::memory_order_relaxed);
-    packet.data->status.has_robot_code = true;
     packet.data->request = this->ds_request.load(std::memory_order_relaxed);
 
     this->udp.beginPacket(this->udp.remoteIP(), this->udp_send_port);

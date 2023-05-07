@@ -49,7 +49,7 @@ class TimedRobot : public RobotBase {
 };
 
 template <typename T>
-void start_robot(RunMode mode = RunMode::Blocking) {
+void start_robot(bool wait_for_ds = true, RunMode mode = RunMode::Blocking) {
 
   run_hal_initialization();
 
@@ -85,12 +85,11 @@ void start_robot(RunMode mode = RunMode::Blocking) {
     ESP.restart();
   };
 
-  DRIVERSTATION.begin();
-  while(!DRIVERSTATION.connected())
-    delay(1);
-
 
   auto run_robot = [] (void* param) {
+    DRIVERSTATION.begin();
+    while(!DRIVERSTATION.connected() && wait_for_ds)
+      delay(1);
     T robot = T();
     robot.start_competition();
     robot.end_competition();

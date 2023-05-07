@@ -16,7 +16,7 @@ class MyRobot : public TimedRobot {
     }
   }
   void disabled_init() override { DRIVERSTATION.print("Disabled Start"); }
-  void teleop_init() { DRIVERSTATION.print("Teleop Start"); }
+  void teleop_init() override { DRIVERSTATION.print("Teleop Start"); }
   void test_init() override { DRIVERSTATION.print("Test Start"); }
   void auton_init() override { DRIVERSTATION.print("Auton Start"); }
 
