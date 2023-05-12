@@ -52,21 +52,36 @@ template <typename T>
 void start_robot(bool wait_for_ds = true, RunMode mode = RunMode::Blocking,
                  Driverstation* driverstation = &DRIVERSTATION) {
   run_hal_initialization();
+  hal_disable_output();
 
   driverstation->disable_hook = [](Driverstation* ds) {
+    hal_disable_output();
     ds->print("Disabled");
-
   };
-  driverstation->teleop_hook = [](Driverstation* ds) { ds->print("Teleop"); };
-  driverstation->test_hook = [](Driverstation* ds) { ds->print("Test"); };
-  driverstation->auton_hook = [](Driverstation* ds) { ds->print("Auton"); };
+  driverstation->teleop_hook = [](Driverstation* ds) {
+    hal_enable_output();
+    ds->print("Teleop");
+  };
+  driverstation->test_hook = [](Driverstation* ds) {
+    hal_enable_output();
+    ds->print("Test");
+  };
+  driverstation->auton_hook = [](Driverstation* ds) {
+    hal_enable_output();
+    ds->print("Auton");
+  };
   driverstation->brownout_start_hook = [](Driverstation* ds) {
+    hal_brownout_output_start();
     ds->print("Brownout Start");
   };
   driverstation->brownout_end_hook = [](Driverstation* ds) {
+    hal_brownout_output_stop();
     ds->print("Brownout End");
   };
-  driverstation->estop_hook = [](Driverstation* ds) { ds->print("Estop"); };
+  driverstation->estop_hook = [](Driverstation* ds) {
+    hal_force_disable();
+    ds->print("Estop");
+  };
   driverstation->restart_code_hook = [](Driverstation* ds) {
     ds->print("Restart Code");
     delay(100);
