@@ -61,9 +61,10 @@ void delete_digital_output(PinHandle handle);
 
 struct PwmHandle{
  private:
-  uint8_t _channel;
+  uint8_t _channel = 255;
  public:
   uint8_t channel();
+  PwmHandle();
   PwmHandle(uint8_t channel, HandleCreation* ctx);
 };
 

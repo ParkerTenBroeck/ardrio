@@ -470,6 +470,8 @@ uint8_t PwmHandle::channel(){
   return this->_channel;
 }
 
+PwmHandle::PwmHandle(){}
+
 PwmHandle::PwmHandle(uint8_t channel, HandleCreation* ctx){
   this->_channel = channel;
 }
@@ -479,6 +481,10 @@ PwmHandle create_pwm_generator(uint8_t resolution, uint32_t frequecy, uint32_t p
     if(!pwm_config[i].exists){
       assert(ledcSetup(i, frequecy, resolution));
       ledcWrite(i, phase);
+      pwm_config[i].exists = true;
+      pwm_config[i].frequency = frequecy;
+      pwm_config[i].phase = phase;
+      pwm_config[i].resolution = resolution;
       return PwmHandle(i, create_pin_handle_creation());
     }
   }
@@ -527,7 +533,7 @@ PinHandle create_pwn_output(uint8_t pin, PwmHandle& pwm_handle, bool disabled_va
                                     .high_power_disabled_val = brownout_val
                                   }}, false);
 
-  pinMode(pin, OUTPUT);
+  // pinMode(pin, OUTPUT);
   ledcAttachPin(pin, pwm_handle.channel());
   unlock_pin_settings_critical();
   return handle;
