@@ -71,11 +71,11 @@ struct PwnTimerSetting {
   bool safety_critical : 1;
   bool high_power_consuption : 1;
   uint32_t frequency;
-  uint32_t phase;
+  uint32_t duty;
   uint32_t disabled_frequency;
-  uint32_t disabled_phase;
+  uint32_t disabled_duty;
   uint32_t brownout_frequency;
-  uint32_t brownout_phase;
+  uint32_t brownout_duty;
 };
 
 struct PwmOutputSetting {
@@ -243,6 +243,16 @@ void run_hal_initialization() {
 void hal_disable_output() {
   lock_pin_settings_critical();
   disable_safety_critical.store(true, std::memory_order_relaxed);
+
+  for(int i = 0; i < NUM_PWM_CHANNELS; i ++){
+    if(pwm_config[i].exists){
+      if(pwm_config[i].safety_critical){
+        assert(ledcSetup(i, pwm_config[i].disabled_frequency, pwm_config[i].resolution));
+        ledcWrite(i, pwm_config[i].disabled_duty);
+      }
+    }
+  }
+
   for(int i = 0; i < NUM_PINS; i ++){
     switch(pin_settings[i].varient){
       case DOutput:{
@@ -269,6 +279,16 @@ void hal_disable_output() {
 void hal_enable_output() {
   lock_pin_settings_critical();
   disable_safety_critical.store(false, std::memory_order_relaxed);
+
+  for(int i = 0; i < NUM_PWM_CHANNELS; i ++){
+    if(pwm_config[i].exists){
+      if(pwm_config[i].safety_critical){
+        assert(ledcSetup(i, pwm_config[i].frequency, pwm_config[i].resolution));
+        ledcWrite(i, pwm_config[i].duty);
+      }
+    }
+  }
+
   for(int i = 0; i < NUM_PINS; i ++){
     switch(pin_settings[i].varient){
       case DOutput:{
@@ -477,35 +497,64 @@ PwmHandle::PwmHandle(uint8_t channel, HandleCreation* ctx){
 }
 
 PwmHandle create_pwm_generator(uint8_t resolution, uint32_t frequecy, uint32_t phase){
+  lock_pin_settings_critical();
   for(uint8_t i = 0; i < NUM_PWM_CHANNELS; i ++){
     if(!pwm_config[i].exists){
-      assert(ledcSetup(i, frequecy, resolution));
-      ledcWrite(i, phase);
+      auto disabled = disable_safety_critical.load(std::memory_order_relaxed);
+      auto browned_out = disable_high_power.load(std::memory_order_relaxed);
+      if(disabled || browned_out){
+        //TODO test to see if we should actually do this
+        assert(ledcSetup(i, 0, resolution));
+      }else{
+        assert(ledcSetup(i, frequecy, resolution));
+        ledcWrite(i, phase);
+      }
       pwm_config[i].exists = true;
       pwm_config[i].frequency = frequecy;
-      pwm_config[i].phase = phase;
+      pwm_config[i].duty = phase;
       pwm_config[i].resolution = resolution;
-      return PwmHandle(i, create_pin_handle_creation());
+      auto handle = PwmHandle(i, create_pin_handle_creation());
+      unlock_pin_settings_critical();
+      return handle;
     }
   }
+  unlock_pin_settings_critical();
   assert(false);
 }
-void update_pwm_duty(PwmHandle& handle, uint32_t phase){
+void update_pwm_duty(PwmHandle& handle, uint32_t duty){
   lock_pin_settings_critical();
   assert(pwm_config[handle.channel()].exists);
-  ledcWrite(handle.channel(), phase);
+  auto safety_critical = pwm_config[handle.channel()].safety_critical;
+  auto disabled = safety_critical && disable_safety_critical.load(std::memory_order_relaxed);
+  auto high_power = pwm_config[handle.channel()].high_power_consuption;
+  auto browned_out = high_power && disable_high_power.load(std::memory_order_relaxed);
+  if((disabled || browned_out))
+    ledcWrite(handle.channel(), duty);
+  pwm_config[handle.channel()].duty = duty;
   unlock_pin_settings_critical();
 }
 void update_pwm_frequency(PwmHandle& handle, uint32_t frequency){
   lock_pin_settings_critical();
   assert(pwm_config[handle.channel()].exists);
-  ledcWriteTone(handle.channel(), frequency);
+  auto safety_critical = pwm_config[handle.channel()].safety_critical;
+  auto disabled = safety_critical && disable_safety_critical.load(std::memory_order_relaxed);
+  auto high_power = pwm_config[handle.channel()].high_power_consuption;
+  auto browned_out = high_power && disable_high_power.load(std::memory_order_relaxed);
+  if((disabled || browned_out))
+    ledcWriteTone(handle.channel(), frequency);
+  pwm_config[handle.channel()].frequency = frequency;
   unlock_pin_settings_critical();
 }
 void update_pwm_resolution(PwmHandle& handle, uint8_t resolution){
   lock_pin_settings_critical();
   assert(pwm_config[handle.channel()].exists);
+    auto safety_critical = pwm_config[handle.channel()].safety_critical;
+  auto disabled = safety_critical && disable_safety_critical.load(std::memory_order_relaxed);
+  auto high_power = pwm_config[handle.channel()].high_power_consuption;
+  auto browned_out = high_power && disable_high_power.load(std::memory_order_relaxed);
+  if((disabled || browned_out))
   ledcChangeFrequency(handle.channel(), ledcReadFreq(handle.channel()), resolution);
+  pwm_config[handle.channel()].resolution = resolution;
   unlock_pin_settings_critical();
 }
 
@@ -515,6 +564,7 @@ void delete_pwm_generator(PwmHandle handle){
   ledcWrite(handle.channel(), 0);
   pwm_config[handle.channel()].exists = false;
   //TODO. possibly use ledc_stop()
+  // also detach all the pins attached to this specific channel
   unlock_pin_settings_critical();
 }
 
