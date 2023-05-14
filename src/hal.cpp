@@ -318,12 +318,72 @@ void hal_force_disable() {
 void hal_brownout_output_start() {
   lock_pin_settings_critical();
   disable_high_power.store(true, std::memory_order_relaxed);
+
+  for(int i = 0; i < NUM_PWM_CHANNELS; i ++){
+    if(pwm_config[i].exists){
+      if(pwm_config[i].high_power_consuption){
+        assert(ledcSetup(i, pwm_config[i].brownout_frequency, pwm_config[i].resolution));
+        ledcWrite(i, pwm_config[i].brownout_duty);
+      }
+    }
+  }
+
+  for(int i = 0; i < NUM_PINS; i ++){
+    switch(pin_settings[i].varient){
+      case DOutput:{
+        if(pin_settings[i].varients.DOutput.high_power_consumption){
+          digitalWrite(i, pin_settings[i].varients.DOutput.high_power_val);
+        }
+      }
+        break;
+      case PwmOutput:{
+        if(pin_settings[i].varients.PwmOutput.high_power_consumption){
+          ledcDetachPin(i);
+          digitalWrite(i, pin_settings[i].varients.PwmOutput.high_power_disabled_val);
+        }
+      }
+        break;
+
+      default:
+        break;
+    }
+  }
   unlock_pin_settings_critical();
 }
 
 void hal_brownout_output_stop() {
   lock_pin_settings_critical();
   disable_high_power.store(false, std::memory_order_relaxed);
+
+  for(int i = 0; i < NUM_PWM_CHANNELS; i ++){
+    if(pwm_config[i].exists){
+      if(pwm_config[i].high_power_consuption){
+        assert(ledcSetup(i, pwm_config[i].frequency, pwm_config[i].resolution));
+        ledcWrite(i, pwm_config[i].duty);
+      }
+    }
+  }
+
+  for(int i = 0; i < NUM_PINS; i ++){
+    switch(pin_settings[i].varient){
+      case DOutput:{
+        if(pin_settings[i].varients.DOutput.high_power_consumption){
+          digitalWrite(i, pin_settings[i].varients.DOutput.current_val);
+        }
+      }
+        break;
+      case PwmOutput:{
+        if(pin_settings[i].varients.PwmOutput.high_power_consumption){
+          ledcAttachPin(i, pin_settings[i].varients.PwmOutput.channel);
+        }
+      }
+        break;
+
+      default:
+        break;
+    }
+  }
+
   unlock_pin_settings_critical();
 }
 
